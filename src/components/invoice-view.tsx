@@ -18,7 +18,10 @@ export function InvoiceView({ invoice, client, items }: InvoiceViewProps) {
   });
 
   return (
-    <div className="bg-white rounded-lg border p-8 max-w-4xl mx-auto print:border-none print:p-0 print:shadow-none">
+    <div
+      id="invoice-print-root"
+      className="bg-white rounded-lg border p-8 max-w-4xl mx-auto print:border-none print:p-0 print:shadow-none"
+    >
       {/* Header */}
       <div className="flex justify-between items-start mb-8 pb-6 border-b-2 border-[#134252]">
         <div>

@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { COMPANY_INFO } from "@/lib/constants";
+import { loginWithPassword } from "@/app/actions/auth";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -21,20 +21,34 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const result = await loginWithPassword(email, password);
 
-    if (error) {
-      setError("Email o password incorrecto");
+      if (result?.error) {
+        if (
+          result.error === "network_error" ||
+          result.error.toLowerCase().includes("fetch") ||
+          result.error.toLowerCase().includes("network")
+        ) {
+          setError(`Error de conexion: ${result.error}`);
+        } else if (result.error.toLowerCase().includes("invalid login")) {
+          setError("Email o password incorrecto");
+        } else {
+          setError(result.error);
+        }
+        setLoading(false);
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError(
+        "Error de red al conectar con Supabase. Verifica proxy/firewall/antivirus."
+      );
       setLoading(false);
       return;
     }
-
-    router.push("/dashboard");
-    router.refresh();
   }
 
   return (
