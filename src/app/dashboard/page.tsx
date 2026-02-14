@@ -1,20 +1,56 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Users, FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { COMPANY_INFO } from "@/lib/constants";
+import { formatCurrency } from "@/lib/pricing";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [clientsResult, invoicesResult] = await Promise.all([
+  const [
+    clientsResult,
+    invoicesResult,
+    draftInvoicesResult,
+    sentInvoicesResult,
+    paidInvoicesResult,
+  ] = await Promise.all([
     supabase.from("clients").select("id", { count: "exact", head: true }),
     supabase.from("invoices").select("id", { count: "exact", head: true }),
+    supabase
+      .from("invoices")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "draft"),
+    supabase
+      .from("invoices")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "sent"),
+    supabase
+      .from("invoices")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "paid"),
   ]);
 
   const totalClients = clientsResult.count ?? 0;
-  const totalInvoices = invoicesResult.count ?? 0;
+  const totalFacturadas = invoicesResult.count ?? 0;
+  const totalBorrador = draftInvoicesResult.count ?? 0;
+  const totalEnviadas = sentInvoicesResult.count ?? 0;
+  const totalCobradas = paidInvoicesResult.count ?? 0;
+  const { data: invoicesForTotals } = await supabase
+    .from("invoices")
+    .select("total, status");
+  const totals = (invoicesForTotals ?? []).reduce(
+    (acc, invoice) => {
+      const amount = Number(invoice.total) || 0;
+      acc.facturado += amount;
+      if (invoice.status === "paid") {
+        acc.cobrado += amount;
+      }
+      return acc;
+    },
+    { facturado: 0, cobrado: 0 }
+  );
+  const totalPendiente = totals.facturado - totals.cobrado;
 
   return (
     <div className="space-y-6">
@@ -28,7 +64,7 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -46,13 +82,96 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Facturas
+              Facturadas
             </CardTitle>
             <FileText className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-[#134252]">
-              {totalInvoices}
+              {totalFacturadas}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Borrador
+            </CardTitle>
+            <FileText className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-[#134252]">
+              {totalBorrador}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Enviadas
+            </CardTitle>
+            <FileText className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-[#134252]">
+              {totalEnviadas}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Cobradas
+            </CardTitle>
+            <FileText className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-[#134252]">
+              {totalCobradas}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              USD Facturado
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-[#134252]">
+              USD {formatCurrency(totals.facturado)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              USD Cobrado
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-[#134252]">
+              USD {formatCurrency(totals.cobrado)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              USD Pendiente
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-[#134252]">
+              USD {formatCurrency(totalPendiente)}
             </div>
           </CardContent>
         </Card>

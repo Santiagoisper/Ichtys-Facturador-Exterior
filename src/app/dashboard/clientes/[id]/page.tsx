@@ -34,6 +34,11 @@ export default async function ClientDetailPage({
 
   const typedClient = client as Client;
   const typedInvoices = (invoices as Invoice[]) ?? [];
+  const totalFacturado = typedInvoices.reduce((acc, invoice) => acc + invoice.total, 0);
+  const totalCobrado = typedInvoices.reduce(
+    (acc, invoice) => acc + (invoice.status === "paid" ? invoice.total : 0),
+    0
+  );
 
   return (
     <div className="space-y-6">
@@ -83,10 +88,20 @@ export default async function ClientDetailPage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            Facturas ({typedInvoices.length})
-          </CardTitle>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Facturas ({typedInvoices.length})
+            </CardTitle>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="text-sm">
+                Facturado: USD {formatCurrency(totalFacturado)}
+              </Badge>
+              <Badge variant="secondary" className="text-sm">
+                Cobrado: USD {formatCurrency(totalCobrado)}
+              </Badge>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {typedInvoices.length === 0 ? (
@@ -113,16 +128,10 @@ export default async function ClientDetailPage({
                       variant={
                         inv.status === "paid"
                           ? "default"
-                          : inv.status === "sent"
-                            ? "secondary"
-                            : "outline"
+                          : "secondary"
                       }
                     >
-                      {inv.status === "paid"
-                        ? "Pagada"
-                        : inv.status === "sent"
-                          ? "Enviada"
-                          : "Borrador"}
+                      {inv.status === "paid" ? "Pagada" : "Enviada"}
                     </Badge>
                     <span className="font-semibold text-[#134252]">
                       USD {formatCurrency(inv.total)}

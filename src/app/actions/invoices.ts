@@ -10,23 +10,50 @@ import {
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-export async function getNextInvoiceNumber(): Promise<string> {
+function extractInvoiceNumberValue(invoiceNumber: string): number {
+  const parsed = parseInt(invoiceNumber.replace(/\D/g, ""), 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+export async function getInvoiceNumberSequence(): Promise<{
+  lastInvoiceNumber: string;
+  nextInvoiceNumber: string;
+}> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("invoices")
-    .select("invoice_number")
-    .order("created_at", { ascending: false })
-    .limit(1);
+  const { data } = await supabase.from("invoices").select("invoice_number");
 
-  if (!data || data.length === 0) return "INV-0001";
+  const invoiceNumbers = (data ?? []).map((row) => row.invoice_number);
+  const maxNumber = invoiceNumbers.reduce(
+    (max, invoiceNumber) => Math.max(max, extractInvoiceNumberValue(invoiceNumber)),
+    0
+  );
 
-  const lastNum = parseInt(data[0].invoice_number.replace(/\D/g, "")) || 0;
-  return `INV-${String(lastNum + 1).padStart(4, "0")}`;
+  return {
+    lastInvoiceNumber: maxNumber > 0 ? `INV-${String(maxNumber).padStart(4, "0")}` : "N/A",
+    nextInvoiceNumber: `INV-${String(maxNumber + 1).padStart(4, "0")}`,
+  };
+}
+
+export async function getNextInvoiceNumber(): Promise<string> {
+  const sequence = await getInvoiceNumberSequence();
+  return sequence.nextInvoiceNumber;
 }
 
 export async function createInvoiceAction(formData: InvoiceFormData) {
   const supabase = await createClient();
   const validated = invoiceSchema.parse(formData);
+  const normalizedInvoiceNumber = validated.invoice_number.trim().toUpperCase();
+
+  const { data: existingInvoice } = await supabase
+    .from("invoices")
+    .select("id")
+    .ilike("invoice_number", normalizedInvoiceNumber)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingInvoice) {
+    return { error: `El numero de factura ${normalizedInvoiceNumber} ya existe.` };
+  }
 
   const totals = calculateInvoiceTotals({
     protocolCount: validated.protocol_count,
@@ -43,7 +70,7 @@ export async function createInvoiceAction(formData: InvoiceFormData) {
     .from("invoices")
     .insert({
       client_id: validated.client_id,
-      invoice_number: validated.invoice_number,
+      invoice_number: normalizedInvoiceNumber,
       date: validated.date,
       period: validated.period || null,
       protocol_count: validated.protocol_count,
@@ -68,6 +95,11 @@ export async function createInvoiceAction(formData: InvoiceFormData) {
     .single();
 
   if (invoiceError) {
+    if (invoiceError.code === "23505") {
+      return {
+        error: `El numero de factura ${normalizedInvoiceNumber} ya existe.`,
+      };
+    }
     return { error: invoiceError.message };
   }
 

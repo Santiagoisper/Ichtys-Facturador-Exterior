@@ -27,9 +27,14 @@ import { toast } from "sonner";
 interface InvoiceFormProps {
   clients: Client[];
   nextInvoiceNumber: string;
+  lastInvoiceNumber: string;
 }
 
-export function InvoiceForm({ clients, nextInvoiceNumber }: InvoiceFormProps) {
+export function InvoiceForm({
+  clients,
+  nextInvoiceNumber,
+  lastInvoiceNumber,
+}: InvoiceFormProps) {
   const [submitting, setSubmitting] = useState(false);
 
   const {
@@ -138,6 +143,9 @@ export function InvoiceForm({ clients, nextInvoiceNumber }: InvoiceFormProps) {
                 {...register("invoice_number")}
                 placeholder="INV-0001"
               />
+              <p className="text-xs text-muted-foreground">
+                Ultima factura: {lastInvoiceNumber} | Sugerido: {nextInvoiceNumber}
+              </p>
               {errors.invoice_number && (
                 <p className="text-sm text-destructive">
                   {errors.invoice_number.message}

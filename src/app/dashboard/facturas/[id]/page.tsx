@@ -102,15 +102,29 @@ export default function InvoiceDetailPage() {
     });
   }
 
+  async function loadScriptWithFallback(sources: string[]) {
+    let lastError: unknown = null;
+    for (const src of sources) {
+      try {
+        await loadScript(src);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ?? new Error("No se pudieron cargar scripts externos.");
+  }
+
   async function handleExportPdf() {
     if (!invoice || !client) return;
 
     try {
       setExportingPdf(true);
 
-      await loadScript(
-        "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"
-      );
+      await loadScriptWithFallback([
+        "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
+        "https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js",
+      ]);
 
       const jsPdfCtor = (
         window as unknown as {
@@ -118,13 +132,24 @@ export default function InvoiceDetailPage() {
             jsPDF: new (options: Record<string, unknown>) => {
               setFont: (fontName: string, fontStyle?: string) => void;
               setFontSize: (size: number) => void;
+              setTextColor: (r: number, g: number, b: number) => void;
+              setDrawColor: (r: number, g: number, b: number) => void;
+              setLineWidth: (width: number) => void;
+              line: (x1: number, y1: number, x2: number, y2: number) => void;
+              rect: (
+                x: number,
+                y: number,
+                width: number,
+                height: number,
+                style?: "S" | "F" | "FD" | "DF"
+              ) => void;
               text: (
-                text: string,
+                text: string | string[],
                 x: number,
                 y: number,
                 options?: { align?: "left" | "center" | "right" }
               ) => void;
-              line: (x1: number, y1: number, x2: number, y2: number) => void;
+              splitTextToSize: (text: string, size: number) => string[];
               addImage: (
                 imageData: string,
                 format: string,
@@ -144,133 +169,223 @@ export default function InvoiceDetailPage() {
       }
 
       const pdf = new jsPdfCtor({
-        orientation: "p",
+        orientation: "l",
         unit: "mm",
         format: "a4",
       });
 
-      const pageWidth = 210;
-      const margin = 8;
+      const pageWidth = 297;
+      const margin = 10;
       const right = pageWidth - margin;
-      let y = 12;
-      const line = (step = 4.2) => {
-        y += step;
-      };
+      let y = 16;
 
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(16);
-      pdf.text("INVOICE", margin, y);
-      pdf.setFontSize(10);
-      pdf.text(`Invoice # ${invoice.invoice_number}`, right, y, { align: "right" });
-      line(5);
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8.5);
-      pdf.text(COMPANY_INFO.adb, margin, y);
-      line(3.8);
-      pdf.text(COMPANY_INFO.legalName, margin, y);
-      line(3.8);
-      pdf.text(`${COMPANY_INFO.taxIdLabel}: ${COMPANY_INFO.taxId}`, margin, y);
-      line(3.8);
-      pdf.text(`${COMPANY_INFO.address}, ${COMPANY_INFO.city}`, margin, y);
-      line(4.4);
-      pdf.text(
-        `Date: ${new Date(invoice.date).toLocaleDateString("en-US")}`,
-        right,
-        y,
-        { align: "right" }
-      );
-      line(6);
-
-      pdf.setFont("helvetica", "bold");
-      pdf.text("Bill To:", margin, y);
-      line(4);
-      pdf.setFont("helvetica", "normal");
-      pdf.text(client.nombre, margin, y);
-      line(3.8);
-      if (client.direccion) {
-        pdf.text(client.direccion, margin, y);
-        line(3.8);
-      }
-      if (client.email) {
-        pdf.text(client.email, margin, y);
-        line(3.8);
-      }
-      if (client.rut_tax_id) {
-        pdf.text(`Tax/RUT: ${client.rut_tax_id}`, margin, y);
-        line(3.8);
-      }
-      line(2.5);
-
-      pdf.setFont("helvetica", "bold");
-      pdf.text("Description", margin, y);
-      pdf.text("Amount (USD)", right, y, { align: "right" });
-      line(4);
-      pdf.line(margin, y - 2.5, right, y - 2.5);
-
-      const addRow = (label: string, amount: number) => {
-        pdf.setFont("helvetica", "normal");
-        pdf.text(label, margin, y);
-        pdf.text(formatCurrency(amount), right, y, { align: "right" });
-        line(4);
-      };
+      const rows: Array<{
+        concept: string;
+        qty: string;
+        unit: number;
+        amount: number;
+      }> = [];
 
       if (invoice.protocol_count > 0) {
-        addRow(
-          `Protocol Base Fee (${invoice.protocol_count} x ${formatCurrency(invoice.protocol_unit_price)})`,
-          invoice.protocol_total
-        );
+        rows.push({
+          concept: "Protocol Base Fee",
+          qty: String(invoice.protocol_count),
+          unit: invoice.protocol_unit_price,
+          amount: invoice.protocol_total,
+        });
       }
       if (invoice.onsite_visits > 0) {
-        addRow(
-          `On-Site Visits (${invoice.onsite_visits} x ${formatCurrency(invoice.onsite_unit_price)})`,
-          invoice.onsite_total
-        );
+        rows.push({
+          concept: "On-Site Visits",
+          qty: String(invoice.onsite_visits),
+          unit: invoice.onsite_unit_price,
+          amount: invoice.onsite_total,
+        });
       }
       if (invoice.remote_visits > 0) {
-        addRow(
-          `Remote Visits (${invoice.remote_visits} x ${formatCurrency(invoice.remote_unit_price)})`,
-          invoice.remote_total
-        );
-      }
-      if (invoice.visit_discount_percent > 0) {
-        addRow(`Discount (${invoice.visit_discount_percent}%)`, -invoice.visit_discount_amount);
+        rows.push({
+          concept: "Remote Visits",
+          qty: String(invoice.remote_visits),
+          unit: invoice.remote_unit_price,
+          amount: invoice.remote_total,
+        });
       }
       if (invoice.implementation_fee > 0) {
-        addRow("Implementation Fee", invoice.implementation_fee);
+        rows.push({
+          concept: "Implementation Fee",
+          qty: "1",
+          unit: invoice.implementation_fee,
+          amount: invoice.implementation_fee,
+        });
       }
-      items.slice(0, 6).forEach((item) => {
-        addRow(
-          `${item.description} (${item.quantity} x ${formatCurrency(item.unit_price)})`,
-          item.total
-        );
+      items.forEach((item) => {
+        rows.push({
+          concept: item.description,
+          qty: String(item.quantity),
+          unit: item.unit_price,
+          amount: item.total,
+        });
       });
 
-      line(1);
-      pdf.line(margin, y - 2.5, right, y - 2.5);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(20);
+      pdf.setTextColor(19, 66, 82);
+      pdf.text("INVOICE", margin, y);
+      pdf.setFontSize(11);
+      pdf.text(invoice.invoice_number, right, y, { align: "right" });
+      y += 7;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      pdf.setTextColor(73, 94, 103);
+      pdf.text(`Date: ${new Date(invoice.date).toLocaleDateString("en-US")}`, right, y, {
+        align: "right",
+      });
+      if (invoice.period) {
+        y += 4;
+        pdf.text(`Period: ${invoice.period}`, right, y, { align: "right" });
+      }
+
+      const leftY = 34;
+      const leftCol = margin;
+      const rightCol = 112;
+
+      pdf.setDrawColor(215, 227, 231);
+      pdf.rect(leftCol, leftY, 88, 30, "S");
+      pdf.rect(rightCol, leftY, 88, 30, "S");
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+      pdf.setTextColor(107, 125, 135);
+      pdf.text("FROM", leftCol + 3, leftY + 5);
+      pdf.text("BILL TO", rightCol + 3, leftY + 5);
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(9.5);
+      pdf.setTextColor(19, 66, 82);
+      pdf.text(COMPANY_INFO.adb, leftCol + 3, leftY + 10);
+      pdf.text(client.nombre, rightCol + 3, leftY + 10);
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(73, 94, 103);
+      const fromLines = [
+        COMPANY_INFO.legalName,
+        `${COMPANY_INFO.taxIdLabel}: ${COMPANY_INFO.taxId}`,
+        `${COMPANY_INFO.address}, ${COMPANY_INFO.city}`,
+      ];
+      const billLines = [
+        client.direccion || "",
+        client.email || "",
+        client.rut_tax_id ? `Tax/RUT: ${client.rut_tax_id}` : "",
+      ].filter(Boolean);
+
+      fromLines.forEach((line, i) => pdf.text(line, leftCol + 3, leftY + 14 + i * 4));
+      billLines.slice(0, 3).forEach((line, i) =>
+        pdf.text(line, rightCol + 3, leftY + 14 + i * 4)
+      );
+
+      const tableX = 204;
+      const tableW = 83;
+      const colConcept = tableX + 2;
+      const colQty = tableX + 53;
+      const colUnit = tableX + 63;
+      const colAmount = tableX + 81;
+      const tableY = 34;
+
+      pdf.setDrawColor(215, 227, 231);
+      pdf.rect(tableX, tableY, tableW, 132, "S");
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+      pdf.setTextColor(107, 125, 135);
+      pdf.text("CONCEPT", colConcept, tableY + 5);
+      pdf.text("QTY", colQty, tableY + 5, { align: "right" });
+      pdf.text("UNIT", colUnit, tableY + 5, { align: "right" });
+      pdf.text("AMOUNT", colAmount, tableY + 5, { align: "right" });
+      pdf.line(tableX, tableY + 7, tableX + tableW, tableY + 7);
+
+      let rowY = tableY + 12;
+      const maxRows = 9;
+      const visibleRows = rows.slice(0, maxRows);
+      visibleRows.forEach((row) => {
+        const concept = row.concept.length > 24 ? `${row.concept.slice(0, 24)}...` : row.concept;
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        pdf.setTextColor(19, 66, 82);
+        pdf.text(concept, colConcept, rowY);
+        pdf.text(row.qty, colQty, rowY, { align: "right" });
+        pdf.text(formatCurrency(row.unit), colUnit, rowY, { align: "right" });
+        pdf.text(formatCurrency(row.amount), colAmount, rowY, { align: "right" });
+        rowY += 6;
+      });
+      if (rows.length > maxRows) {
+        pdf.setFont("helvetica", "italic");
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(107, 125, 135);
+        pdf.text(`+ ${rows.length - maxRows} items more`, colConcept, rowY);
+      }
+
+      const summaryY = 114;
+      pdf.setDrawColor(215, 227, 231);
+      pdf.rect(10, summaryY, 192, 52, "S");
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(9);
+      pdf.setTextColor(19, 66, 82);
+      pdf.text("SUMMARY", 13, summaryY + 6);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(73, 94, 103);
+      pdf.text("Subtotal", 13, summaryY + 14);
+      pdf.text(`USD ${formatCurrency(invoice.subtotal)}`, 90, summaryY + 14, { align: "right" });
+      pdf.text("Discount", 13, summaryY + 20);
+      pdf.text(`-USD ${formatCurrency(invoice.discount_amount)}`, 90, summaryY + 20, {
+        align: "right",
+      });
+      pdf.setLineWidth(0.3);
+      pdf.line(13, summaryY + 24, 90, summaryY + 24);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(11);
-      pdf.text("TOTAL DUE", margin, y + 1);
-      pdf.text(formatCurrency(invoice.total), right, y + 1, { align: "right" });
-      line(7);
+      pdf.setTextColor(19, 66, 82);
+      pdf.text("TOTAL DUE", 13, summaryY + 32);
+      pdf.text(`USD ${formatCurrency(invoice.total)}`, 90, summaryY + 32, {
+        align: "right",
+      });
 
-      pdf.setFontSize(8);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(9);
+      pdf.setTextColor(19, 66, 82);
+      pdf.text("BANK DETAILS", 108, summaryY + 6);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`Bank: ${BANK_DETAILS.bank}`, margin, y);
-      line(3.6);
-      pdf.text(`ABA: ${BANK_DETAILS.aba} | Swift: ${BANK_DETAILS.swift}`, margin, y);
-      line(3.6);
-      pdf.text(`Beneficiary: ${BANK_DETAILS.beneficiary}`, margin, y);
-      line(3.6);
-      pdf.text(`Account: ${BANK_DETAILS.account}`, margin, y);
-      line(3.6);
-      pdf.text(`Address: ${BANK_DETAILS.address}`, margin, y);
+      pdf.setFontSize(8);
+      pdf.setTextColor(73, 94, 103);
+      const bankLines = [
+        `Bank: ${BANK_DETAILS.bank}`,
+        `ABA: ${BANK_DETAILS.aba} | Swift: ${BANK_DETAILS.swift}`,
+        `Beneficiary: ${BANK_DETAILS.beneficiary}`,
+        `Account: ${BANK_DETAILS.account}`,
+      ];
+      bankLines.forEach((line, i) => pdf.text(line, 108, summaryY + 14 + i * 5));
+
+      if (invoice.notes) {
+        const notesTop = 171;
+        const notesMaxWidth = pageWidth - margin * 2;
+        const notes = pdf.splitTextToSize(invoice.notes, notesMaxWidth - 8).slice(0, 3);
+        pdf.setDrawColor(215, 227, 231);
+        pdf.rect(margin, notesTop, notesMaxWidth, 25, "S");
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8);
+        pdf.setTextColor(107, 125, 135);
+        pdf.text("NOTES", margin + 3, notesTop + 5);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        pdf.setTextColor(73, 94, 103);
+        pdf.text(notes, margin + 3, notesTop + 10);
+      }
 
       pdf.save(`Invoice-${invoice.invoice_number}.pdf`);
       toast.success("PDF exportado.");
     } catch (error) {
       console.error(error);
-      toast.error("No se pudo exportar el PDF.");
+      toast.error("No se pudo exportar automaticamente el PDF.");
     } finally {
       setExportingPdf(false);
     }

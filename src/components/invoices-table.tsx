@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { deleteInvoiceAction } from "@/app/actions/invoices";
@@ -63,6 +63,30 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
       statusFilter === "all" || inv.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+  const groupedInvoices = filtered
+    .slice()
+    .sort((a, b) => {
+      const clientA = (a.client?.nombre ?? "Sin cliente").toLowerCase();
+      const clientB = (b.client?.nombre ?? "Sin cliente").toLowerCase();
+      if (clientA !== clientB) {
+        return clientA.localeCompare(clientB, "es");
+      }
+      return (
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+    })
+    .reduce<Record<string, (Invoice & { client?: { nombre: string } })[]>>(
+      (acc, invoice) => {
+        const clientName = invoice.client?.nombre ?? "Sin cliente";
+        if (!acc[clientName]) {
+          acc[clientName] = [];
+        }
+        acc[clientName].push(invoice);
+        return acc;
+      },
+      {}
+    );
+  const groupedEntries = Object.entries(groupedInvoices);
 
   async function handleDelete(id: string) {
     const result = await deleteInvoiceAction(id);
@@ -104,7 +128,6 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Factura #</TableHead>
-              <TableHead>Cliente</TableHead>
               <TableHead>Fecha</TableHead>
               <TableHead>Periodo</TableHead>
               <TableHead>Estado</TableHead>
@@ -113,10 +136,10 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
+            {groupedEntries.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={6}
                   className="text-center py-8 text-muted-foreground"
                 >
                   {search || statusFilter !== "all"
@@ -125,75 +148,83 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((inv) => (
-                <TableRow key={inv.id}>
-                  <TableCell className="font-medium">
-                    {inv.invoice_number}
-                  </TableCell>
-                  <TableCell>{inv.client?.nombre ?? "-"}</TableCell>
-                  <TableCell>
-                    {new Date(inv.date).toLocaleDateString("es")}
-                  </TableCell>
-                  <TableCell>{inv.period || "-"}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        inv.status === "paid"
-                          ? "default"
-                          : inv.status === "sent"
-                            ? "secondary"
-                            : "outline"
-                      }
-                    >
-                      {STATUS_LABELS[inv.status] || inv.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-semibold text-[#134252]">
-                    USD {formatCurrency(inv.total)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Link href={`/dashboard/facturas/${inv.id}`}>
-                        <Button variant="ghost" size="icon" title="Ver">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </Link>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Eliminar"
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              Eliminar factura
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Esta accion no se puede deshacer. Se eliminara
-                              permanentemente la factura &quot;
-                              {inv.invoice_number}&quot;.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(inv.id)}
-                              className="bg-destructive text-white hover:bg-destructive/90"
-                            >
-                              Eliminar
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </TableCell>
-                </TableRow>
+              groupedEntries.map(([clientName, clientInvoices]) => (
+                <Fragment key={`group-${clientName}`}>
+                  <TableRow className="bg-muted/40">
+                    <TableCell colSpan={6} className="font-semibold text-[#134252]">
+                      {clientName} ({clientInvoices.length})
+                    </TableCell>
+                  </TableRow>
+                  {clientInvoices.map((inv) => (
+                    <TableRow key={inv.id}>
+                      <TableCell className="font-medium">
+                        {inv.invoice_number}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(inv.date).toLocaleDateString("es")}
+                      </TableCell>
+                      <TableCell>{inv.period || "-"}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            inv.status === "paid"
+                              ? "default"
+                              : inv.status === "sent"
+                                ? "secondary"
+                                : "outline"
+                          }
+                        >
+                          {STATUS_LABELS[inv.status] || inv.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-[#134252]">
+                        USD {formatCurrency(inv.total)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Link href={`/dashboard/facturas/${inv.id}`}>
+                            <Button variant="ghost" size="icon" title="Ver">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </Link>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Eliminar"
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Eliminar factura
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Esta accion no se puede deshacer. Se eliminara
+                                  permanentemente la factura &quot;
+                                  {inv.invoice_number}&quot;.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDelete(inv.id)}
+                                  className="bg-destructive text-white hover:bg-destructive/90"
+                                >
+                                  Eliminar
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
               ))
             )}
           </TableBody>
