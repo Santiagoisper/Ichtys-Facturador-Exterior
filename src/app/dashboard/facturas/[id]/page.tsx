@@ -103,7 +103,7 @@ export default function InvoiceDetailPage() {
   }
 
   async function handleExportPdf() {
-    if (!invoice) return;
+    if (!invoice || !client) return;
 
     try {
       setExportingPdf(true);
@@ -116,6 +116,15 @@ export default function InvoiceDetailPage() {
         window as unknown as {
           jspdf: {
             jsPDF: new (options: Record<string, unknown>) => {
+              setFont: (fontName: string, fontStyle?: string) => void;
+              setFontSize: (size: number) => void;
+              text: (
+                text: string,
+                x: number,
+                y: number,
+                options?: { align?: "left" | "center" | "right" }
+              ) => void;
+              line: (x1: number, y1: number, x2: number, y2: number) => void;
               addImage: (
                 imageData: string,
                 format: string,
