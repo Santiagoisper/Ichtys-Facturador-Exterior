@@ -2,6 +2,8 @@ export const COMPANY_INFO = {
   name: "ICHTYS TECHNOLOGY",
   adb: "ADB: ICHTYS TECHNOLOGY",
   legalName: "Veritas Lux Capital LLC",
+  taxIdLabel: "EIN",
+  taxId: "39-4279278",
   address: "104 Crandon Blvd. Suite 312",
   city: "Key Biscayne, FL 33149",
 } as const;

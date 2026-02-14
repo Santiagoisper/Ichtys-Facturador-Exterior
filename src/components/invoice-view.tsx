@@ -26,6 +26,9 @@ export function InvoiceView({ invoice, client, items }: InvoiceViewProps) {
           <div className="text-sm text-gray-500 leading-relaxed">
             <p className="font-semibold text-[#134252]">{COMPANY_INFO.adb}</p>
             <p>{COMPANY_INFO.legalName}</p>
+            <p>
+              {COMPANY_INFO.taxIdLabel}: {COMPANY_INFO.taxId}
+            </p>
             <p>{COMPANY_INFO.address}</p>
             <p>{COMPANY_INFO.city}</p>
           </div>
