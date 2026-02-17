@@ -1,15 +1,29 @@
-import { createClient } from "@/lib/supabase/server";
+import { sql } from "@/lib/db";
 import { InvoicesTable } from "@/components/invoices-table";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import type { Invoice } from "@/lib/types";
+
+type InvoiceRow = Invoice & {
+  client_nombre: string | null;
+};
 
 export default async function FacturasPage() {
-  const supabase = await createClient();
-  const { data: invoices } = await supabase
-    .from("invoices")
-    .select("*, client:clients(nombre)")
-    .order("date", { ascending: false });
+  const rows = await sql<InvoiceRow[]>`
+    select
+      i.*,
+      c.nombre as client_nombre
+    from invoices i
+    left join clients c on c.id = i.client_id
+    order by i.date desc
+  `;
+
+  const invoices = rows.map((row) => ({
+    ...row,
+    total: Number(row.total) || 0,
+    client: row.client_nombre ? { nombre: row.client_nombre } : undefined,
+  }));
 
   return (
     <div className="space-y-6">

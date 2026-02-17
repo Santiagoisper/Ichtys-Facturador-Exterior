@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { sql } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,29 +14,37 @@ export default async function ClientDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-
-  const { data: client } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const clients = await sql<Client[]>`
+    select *
+    from clients
+    where id = ${id}::uuid
+    limit 1
+  `;
+  const client = clients[0];
 
   if (!client) {
     notFound();
   }
 
-  const { data: invoices } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("client_id", id)
-    .order("date", { ascending: false });
+  const invoices = await sql<Invoice[]>`
+    select *
+    from invoices
+    where client_id = ${id}::uuid
+    order by date desc
+  `;
 
-  const typedClient = client as Client;
-  const typedInvoices = (invoices as Invoice[]) ?? [];
-  const totalFacturado = typedInvoices.reduce((acc, invoice) => acc + invoice.total, 0);
+  const typedClient = client;
+  const typedInvoices = (invoices ?? []).map((invoice) => ({
+    ...invoice,
+    total: Number(invoice.total) || 0,
+  }));
+  const totalFacturado = typedInvoices.reduce(
+    (acc, invoice) => acc + (Number(invoice.total) || 0),
+    0
+  );
   const totalCobrado = typedInvoices.reduce(
-    (acc, invoice) => acc + (invoice.status === "paid" ? invoice.total : 0),
+    (acc, invoice) =>
+      acc + (invoice.status === "paid" ? Number(invoice.total) || 0 : 0),
     0
   );
 

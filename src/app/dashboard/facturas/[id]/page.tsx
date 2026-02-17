@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { updateInvoiceStatusAction } from "@/app/actions/invoices";
 import { InvoiceView } from "@/components/invoice-view";
 import { Button } from "@/components/ui/button";
@@ -39,31 +38,29 @@ export default function InvoiceDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
-      const { data: inv } = await supabase
-        .from("invoices")
-        .select("*")
-        .eq("id", params.id)
-        .single();
+      try {
+        const response = await fetch(`/api/invoices/${params.id}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
 
-      if (!inv) {
-        router.push("/dashboard/facturas");
-        return;
+        if (!response.ok) {
+          router.push("/dashboard/facturas");
+          return;
+        }
+
+        const payload = (await response.json()) as {
+          invoice: Invoice;
+          client: Client;
+          items: InvoiceItem[];
+        };
+
+        setInvoice(payload.invoice);
+        setClient(payload.client);
+        setItems(payload.items ?? []);
+      } finally {
+        setLoading(false);
       }
-
-      const [{ data: clientData }, { data: itemsData }] = await Promise.all([
-        supabase.from("clients").select("*").eq("id", inv.client_id).single(),
-        supabase
-          .from("invoice_items")
-          .select("*")
-          .eq("invoice_id", inv.id)
-          .order("sort_order"),
-      ]);
-
-      setInvoice(inv as Invoice);
-      setClient(clientData as Client);
-      setItems((itemsData as InvoiceItem[]) ?? []);
-      setLoading(false);
     }
     load();
   }, [params.id, router]);

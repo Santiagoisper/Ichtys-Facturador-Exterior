@@ -1,45 +1,33 @@
-import { createClient } from "@/lib/supabase/server";
+import { sql } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { COMPANY_INFO } from "@/lib/constants";
 import { formatCurrency } from "@/lib/pricing";
 
-export default async function DashboardPage() {
-  const supabase = await createClient();
+type TotalsRow = {
+  total: string | number;
+  status: "draft" | "sent" | "paid";
+};
 
+export default async function DashboardPage() {
   const [
-    clientsResult,
-    invoicesResult,
-    draftInvoicesResult,
-    sentInvoicesResult,
-    paidInvoicesResult,
+    [{ count: totalClients }],
+    [{ count: totalFacturadas }],
+    [{ count: totalBorrador }],
+    [{ count: totalEnviadas }],
+    [{ count: totalCobradas }],
+    invoicesForTotals,
   ] = await Promise.all([
-    supabase.from("clients").select("id", { count: "exact", head: true }),
-    supabase.from("invoices").select("id", { count: "exact", head: true }),
-    supabase
-      .from("invoices")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "draft"),
-    supabase
-      .from("invoices")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "sent"),
-    supabase
-      .from("invoices")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "paid"),
+    sql<{ count: string }[]>`select count(*)::text as count from clients`,
+    sql<{ count: string }[]>`select count(*)::text as count from invoices`,
+    sql<{ count: string }[]>`select count(*)::text as count from invoices where status = 'draft'`,
+    sql<{ count: string }[]>`select count(*)::text as count from invoices where status = 'sent'`,
+    sql<{ count: string }[]>`select count(*)::text as count from invoices where status = 'paid'`,
+    sql<TotalsRow[]>`select total, status from invoices`,
   ]);
 
-  const totalClients = clientsResult.count ?? 0;
-  const totalFacturadas = invoicesResult.count ?? 0;
-  const totalBorrador = draftInvoicesResult.count ?? 0;
-  const totalEnviadas = sentInvoicesResult.count ?? 0;
-  const totalCobradas = paidInvoicesResult.count ?? 0;
-  const { data: invoicesForTotals } = await supabase
-    .from("invoices")
-    .select("total, status");
-  const totals = (invoicesForTotals ?? []).reduce(
+  const totals = invoicesForTotals.reduce(
     (acc, invoice) => {
       const amount = Number(invoice.total) || 0;
       acc.facturado += amount;
@@ -55,12 +43,9 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#134252]">
-          {COMPANY_INFO.adb}
-        </h1>
+        <h1 className="text-2xl font-bold text-[#134252]">{COMPANY_INFO.adb}</h1>
         <p className="text-muted-foreground">
-          {COMPANY_INFO.legalName} &mdash; {COMPANY_INFO.address},{" "}
-          {COMPANY_INFO.city}
+          {COMPANY_INFO.legalName} &mdash; {COMPANY_INFO.address}, {COMPANY_INFO.city}
         </p>
       </div>
 
@@ -73,9 +58,7 @@ export default async function DashboardPage() {
             <Users className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-[#134252]">
-              {totalClients}
-            </div>
+            <div className="text-3xl font-bold text-[#134252]">{Number(totalClients) || 0}</div>
           </CardContent>
         </Card>
 
@@ -88,7 +71,7 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-[#134252]">
-              {totalFacturadas}
+              {Number(totalFacturadas) || 0}
             </div>
           </CardContent>
         </Card>
@@ -101,9 +84,7 @@ export default async function DashboardPage() {
             <FileText className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-[#134252]">
-              {totalBorrador}
-            </div>
+            <div className="text-3xl font-bold text-[#134252]">{Number(totalBorrador) || 0}</div>
           </CardContent>
         </Card>
 
@@ -115,9 +96,7 @@ export default async function DashboardPage() {
             <FileText className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-[#134252]">
-              {totalEnviadas}
-            </div>
+            <div className="text-3xl font-bold text-[#134252]">{Number(totalEnviadas) || 0}</div>
           </CardContent>
         </Card>
 
@@ -129,9 +108,7 @@ export default async function DashboardPage() {
             <FileText className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-[#134252]">
-              {totalCobradas}
-            </div>
+            <div className="text-3xl font-bold text-[#134252]">{Number(totalCobradas) || 0}</div>
           </CardContent>
         </Card>
       </div>
@@ -185,9 +162,7 @@ export default async function DashboardPage() {
                 <Plus className="w-6 h-6 text-[#1a7482]" />
               </div>
               <div>
-                <h3 className="font-semibold text-[#134252]">
-                  Ingresar Cliente
-                </h3>
+                <h3 className="font-semibold text-[#134252]">Ingresar Cliente</h3>
                 <p className="text-sm text-muted-foreground">
                   Agregar un nuevo cliente al sistema
                 </p>
@@ -204,9 +179,7 @@ export default async function DashboardPage() {
               </div>
               <div>
                 <h3 className="font-semibold text-[#134252]">Crear Factura</h3>
-                <p className="text-sm text-muted-foreground">
-                  Generar una nueva factura
-                </p>
+                <p className="text-sm text-muted-foreground">Generar una nueva factura</p>
               </div>
             </CardContent>
           </Card>
@@ -215,3 +188,4 @@ export default async function DashboardPage() {
     </div>
   );
 }
+

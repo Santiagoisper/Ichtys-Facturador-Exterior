@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { sql } from "@/lib/db";
 import { ClientsTable } from "@/components/clients-table";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
@@ -6,11 +6,11 @@ import Link from "next/link";
 import type { Client } from "@/lib/types";
 
 export default async function ClientesPage() {
-  const supabase = await createClient();
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("*")
-    .order("nombre");
+  const clients = await sql<Client[]>`
+    select *
+    from clients
+    order by nombre asc
+  `;
 
   return (
     <div className="space-y-6">
@@ -29,7 +29,7 @@ export default async function ClientesPage() {
         </Link>
       </div>
 
-      <ClientsTable clients={(clients as Client[]) ?? []} />
+      <ClientsTable clients={clients ?? []} />
     </div>
   );
 }

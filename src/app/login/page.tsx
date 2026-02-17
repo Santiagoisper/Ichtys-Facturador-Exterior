@@ -44,7 +44,7 @@ export default function LoginPage() {
       router.refresh();
     } catch {
       setError(
-        "Error de red al conectar con Supabase. Verifica proxy/firewall/antivirus."
+        "Error de red al iniciar sesion. Verifica conexion o variables de entorno."
       );
       setLoading(false);
       return;

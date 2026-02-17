@@ -39,8 +39,12 @@ import { Eye, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
 
 interface InvoicesTableProps {
-  invoices: (Invoice & { client?: { nombre: string } })[];
+  invoices: InvoiceTableRow[];
 }
+
+type InvoiceTableRow = Omit<Invoice, "client"> & {
+  client?: { nombre: string };
+};
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Borrador",
@@ -75,7 +79,7 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
         new Date(b.date).getTime() - new Date(a.date).getTime()
       );
     })
-    .reduce<Record<string, (Invoice & { client?: { nombre: string } })[]>>(
+    .reduce<Record<string, InvoiceTableRow[]>>(
       (acc, invoice) => {
         const clientName = invoice.client?.nombre ?? "Sin cliente";
         if (!acc[clientName]) {

@@ -1,12 +1,15 @@
-import { createClient } from "@/lib/supabase/server";
+import { sql } from "@/lib/db";
 import { getInvoiceNumberSequence } from "@/app/actions/invoices";
 import { InvoiceForm } from "@/components/invoice-form";
 import type { Client } from "@/lib/types";
 
 export default async function NuevaFacturaPage() {
-  const supabase = await createClient();
-  const [{ data: clients }, invoiceSequence] = await Promise.all([
-    supabase.from("clients").select("*").order("nombre"),
+  const [clients, invoiceSequence] = await Promise.all([
+    sql<Client[]>`
+      select *
+      from clients
+      order by nombre asc
+    `,
     getInvoiceNumberSequence(),
   ]);
 
@@ -19,7 +22,7 @@ export default async function NuevaFacturaPage() {
         </p>
       </div>
       <InvoiceForm
-        clients={(clients as Client[]) ?? []}
+        clients={clients ?? []}
         nextInvoiceNumber={invoiceSequence.nextInvoiceNumber}
         lastInvoiceNumber={invoiceSequence.lastInvoiceNumber}
       />
